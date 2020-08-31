@@ -1,0 +1,5 @@
+{
+  "commands": {
+    "tx2seq": "tx2seq.js"
+  }
+}

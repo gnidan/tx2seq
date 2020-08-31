@@ -1,0 +1,17 @@
+{
+  "name": "tx2seq",
+  "version": "0.1.0",
+  "description": "`truffle run` plugin to generate UML sequence diagrams",
+  "main": "tx2seq.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "g. nicholas d'andrea <nick@gnidan.org>",
+  "license": "MIT",
+  "dependencies": {
+    "@truffle/codec": "^0.5.14",
+    "@truffle/core": "^5.1.42",
+    "@truffle/debugger": "^7.5.13",
+    "neodoc": "^2.0.2"
+  }
+}
