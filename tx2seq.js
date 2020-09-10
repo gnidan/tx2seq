@@ -122,6 +122,10 @@ const run = async (config) => {
   while (activations.length) {
     const to = activations.shift();
 
+    // console.group("cleanup");
+    // console.debug("to %o", to);
+    // console.debug("possible froms %o", activations);
+
     const fromIndex = activations.findIndex(
       ({ name, identifier }) => name !== identifier
     );
@@ -133,13 +137,17 @@ const run = async (config) => {
           ? 0
           : fromIndex - 1;
 
+
     for (let i = 0; i < amountToShift; i++) {
       activations.shift();
     }
 
-
-
     const from = activations[0] || { identifier: "" };
+
+    // console.debug("fromIndex %o", fromIndex);
+    // console.debug("amountToShift %o", amountToShift);
+    // console.debug("from %o", from);
+    // console.groupEnd();
 
     if (to.name !== to.identifier) {
       lines = [
