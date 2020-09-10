@@ -1,11 +1,13 @@
+const util = require("util");
 const neodoc = require("neodoc");
 
+const Codec = require("@truffle/codec");
 const { CLIDebugger } = require("@truffle/core/lib/debug/cli");
 const { selectors: $ } = require("@truffle/debugger");
 
 const commandName = "tx2seq";
 const usage = `
-usage: tx2seq [--fetch-external|-x] <tx-hash>
+usage: ${commandName} [--fetch-external|-x] <tx-hash>
 
 options:
   --fetch-external, -x
@@ -14,10 +16,11 @@ options:
 
 
 const run = async (config) => {
-  const { txHash } = parseOptions(process.argv);
+  const { txHash, fetchExternal } = parseOptions(process.argv);
 
   const cli = new CLIDebugger(
     config.with({
+      fetchExternal,
       logger: {
         log: () => {}
       }
@@ -36,6 +39,8 @@ const run = async (config) => {
   while (!bugger.view($.trace.finished)) {
     const stacktrace = bugger.view($.stacktrace.current.callstack);
 
+    bugger.advance();
+
     if (stacktrace !== lastStacktrace) {
       if (stacktrace.length === lastStacktrace.length + 1) {
         // new frame
@@ -43,27 +48,65 @@ const run = async (config) => {
 
         const participant = makeParticipant(stackframe);
         const { identifier } = participant;
-        participants[identifier] = participant;
 
-        lines = [
-          ...lines,
-          ...sequence.start({
-            from: activations[0] || { identifier: "" },
-            to: participant,
-            functionName: stackframe.functionName
-          })
-        ];
+        if (stackframe.contractName) {
+          participants[identifier] = participant;
+
+          const node = bugger.view($.data.current.function);
+
+          const variables = await bugger.variables();
+
+          const parameters = node && node.parameters
+            ? node.parameters.parameters.map(
+              ({ name }) => ({
+                name,
+                result: variables[name]
+              })
+            )
+
+            : [];
+
+          const from = activations
+            .find(
+              ({ name, identifier }) => name !== identifier
+            ) || { identifier: "" };
+
+          lines = [
+            ...lines,
+            ...sequence.start({
+              from,
+              // from: activations[0] || { identifier: "" },
+              to: participant,
+              functionName: stackframe.functionName,
+              parameters
+            })
+          ];
+        }
 
         activations.unshift(participant);
-
       } else if (stacktrace.length === lastStacktrace.length - 1) {
-        lines = [
-          ...lines,
-          ...sequence.finish({
-            to: activations.shift(),
-            from: activations[0] || { identifier: "" }
-          })
-        ];
+        const to = activations.shift();
+
+        const fromIndex = activations
+          .findIndex(
+            ({ name, identifier }) => name !== identifier
+          );
+
+        for (const i = 0; i < fromIndex; i++) {
+          activations.shift();
+        }
+
+        const from = activations[0] || { identifier: "" };
+
+        if (to.name !== to.identifier) {
+          lines = [
+            ...lines,
+            ...sequence.finish({
+              from,
+              to
+            })
+          ];
+        }
       } else {
         console.warn(
           "stacktrace.length %o, lastStacktrace.length %o",
@@ -74,18 +117,39 @@ const run = async (config) => {
 
     }
     lastStacktrace = stacktrace;
-
-    bugger.stepNext();
   }
 
   while (activations.length) {
-    lines = [
-      ...lines,
-      ...sequence.finish({
-        to: activations.shift(),
-        from: activations[0] || { identifier: "" }
-      })
-    ];
+    const to = activations.shift();
+
+    const fromIndex = activations.findIndex(
+      ({ name, identifier }) => name !== identifier
+    );
+
+    const amountToShift =
+      fromIndex === -1
+        ? activations.length
+        : fromIndex === 0
+          ? 0
+          : fromIndex - 1;
+
+    for (let i = 0; i < amountToShift; i++) {
+      activations.shift();
+    }
+
+
+
+    const from = activations[0] || { identifier: "" };
+
+    if (to.name !== to.identifier) {
+      lines = [
+        ...lines,
+        ...sequence.finish({
+          from,
+          to
+        })
+      ];
+    }
   }
 
   const diagram = [
@@ -98,7 +162,7 @@ const run = async (config) => {
   ];
 
   console.log(diagram.join("\n"));
-}.trim();
+}
 
 const parseOptions = (args) => {
   // convert raw args for neodoc
@@ -107,13 +171,15 @@ const parseOptions = (args) => {
   const argv = args.slice(args.indexOf(commandName) + 1)
 
   const {
-    "--fetch-external": fetchExternal,
-    "<tx-hash>": txHash
+    "<tx-hash>": txHash,
+    ...options
   } = neodoc.run(usage, {
     argv,
     smartOptions: true,
     allowUnknown: true
   });
+
+  const fetchExternal = options["--fetch-external"] || options["-x"];
 
   return {
     fetchExternal,
@@ -143,10 +209,26 @@ const makeParticipant = (stackframe) => {
 }
 
 const sequence = {
-  start({ from, to, functionName }) {
+  start({ from, to, functionName, parameters = [] }) {
+    // console.debug("start");
+    // console.debug("from %o", from.identifier);
+    // console.debug("to %o", to.identifier);
+    // console.debug("");
+    const arguments = parameters
+      .map(
+        ({ name, result }) => result
+          ? `${name}: **${util.inspect(new Codec.Format.Utils.Inspect.ResultInspector(result))}**`
+          : `${name}: <unknown>`
+      )
+      .join(",\\n  ");
+
+    const call = parameters.length
+      ? `**${functionName}**(\\n  ${arguments}\\n)`
+      : `**${functionName}**()`;
+
     const message =
       functionName
-        ? `${from.identifier} -> ${to.identifier} : ${functionName}`
+        ? `${from.identifier} -> ${to.identifier} : ${call}`
         : `${from.identifier} -> ${to.identifier}`;
     return [
       message,
@@ -155,6 +237,10 @@ const sequence = {
   },
 
   finish({ from, to }) {
+    // console.debug("finish");
+    // console.debug("from %o", from.identifier);
+    // console.debug("to %o", to.identifier);
+    // console.debug("");
     return [
       `${from.identifier} <-- ${to.identifier}`,
       `deactivate ${to.identifier}`
