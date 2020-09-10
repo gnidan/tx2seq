@@ -38,6 +38,7 @@ This repo isn't published to NPM so you'll need to clone + link manually.
 ```console
 $ git clone git@github.com:gnidan/tx2seq.git
 $ cd tx2seq
+$ yarn
 $ yarn link
 ```
 
