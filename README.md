@@ -31,6 +31,14 @@ $ git checkout bag/tx2seq
 $ yarn bootstrap
 ```
 
+You'll also need to link @truffle/core. From the Truffle repo root directory:
+
+```console
+$ cd packages/core
+$ yarn link
+```
+
+
 ### Clone this repo
 
 This repo isn't published to NPM so you'll need to clone + link manually.
@@ -39,6 +47,7 @@ This repo isn't published to NPM so you'll need to clone + link manually.
 $ git clone git@github.com:gnidan/tx2seq.git
 $ cd tx2seq
 $ yarn
+$ yarn link @truffle/core
 $ yarn link
 ```
 
